@@ -1,11 +1,14 @@
 ﻿<#
   주변 Wi-Fi AP 신호 세기를 여러 번 측정해 평균으로 순위를 낸다.
 
-  .\wifi-signal.ps1                       횟수를 직접 입력받아 전체 측정
-  .\wifi-signal.ps1 cagong                SSID에 'cagong' 포함, 횟수는 입력받음
-  .\wifi-signal.ps1 cagong 5              입력 없이 바로 5회 측정
-  .\wifi-signal.ps1 cagong 5 -DelaySec 8  스캔 요청 후 8초 대기
-  .\wifi-signal.ps1 -SelfTest             파서 자체 검사
+  그냥 실행하면 측정 횟수와 SSID를 순서대로 물어본다.
+    .\wifi-signal.ps1
+
+  인자로 넘기면 묻지 않는다 (배치/예약 실행용).
+    .\wifi-signal.ps1 cagong 5              cagong 포함 AP, 5회
+    .\wifi-signal.ps1 '' 5                  전체 AP, 5회
+    .\wifi-signal.ps1 cagong 5 -DelaySec 8  스캔 요청 후 8초 대기
+    .\wifi-signal.ps1 -SelfTest             파서 자체 검사
 
   중요: netsh는 스캔을 새로 돌리지 않고 드라이버가 캐시한 결과만 돌려준다.
   그냥 반복 호출하면 같은 값이 그대로 복사되고, 캐시가 비어 있으면 AP가
@@ -43,17 +46,27 @@ if ($SelfTest) {
     exit 0
 }
 
-# 횟수를 인자로 안 줬으면 직접 물어본다 (탐색기에서 더블클릭 실행한 경우 포함)
+# 인자를 안 줬으면 직접 물어본다 (탐색기에서 실행한 경우 포함)
 $asked = $false
+
 if ($Count -lt 1) {
     $asked = $true
     while ($true) {
-        $in = Read-Host '원하는 시도 횟수를 입력해주세요 (Enter = 5)'
+        $in = Read-Host '원하는 측정 횟수를 입력해주세요 (Enter = 5)'
         if ([string]::IsNullOrWhiteSpace($in)) { $Count = 5; break }
         if ($in -match '^\d+$' -and [int]$in -ge 1) { $Count = [int]$in; break }
         Write-Host '1 이상의 숫자로 입력해주세요.' -ForegroundColor Yellow
     }
-    Write-Host "$Count 회 측정 — 약 $($Count * $DelaySec)초 소요`n"
+}
+
+if (-not $PSBoundParameters.ContainsKey('Filter')) {
+    $asked = $true
+    $Filter = (Read-Host '찾을 SSID를 입력해주세요, 일부만 입력해도 됩니다 (Enter = 전체)').Trim()
+}
+
+if ($asked) {
+    $what = if ($Filter) { "'$Filter' 포함 AP" } else { '전체 AP' }
+    Write-Host "$what, $Count 회 측정 — 약 $($Count * $DelaySec)초 소요`n"
 }
 
 # 드라이버에 실제 스캔을 요청한다. 실패하면 $false (캐시만 읽고 진행).
@@ -94,7 +107,12 @@ $samples = foreach ($i in 1..$Count) {
 }
 
 if ($Filter) { $samples = @($samples | Where-Object { $_.SSID -like "*$Filter*" }) }
-if (-not $samples) { Write-Host '잡히는 AP 없음 (Wi-Fi 꺼짐 또는 필터 불일치)'; exit 1 }
+
+if (-not $samples) {
+    Write-Host "`n잡히는 AP 없음 (Wi-Fi 꺼짐 또는 SSID 불일치)" -ForegroundColor Yellow
+    if ($asked) { Read-Host "`n종료하려면 Enter" | Out-Null }
+    exit 1
+}
 
 $result = $samples | Group-Object SSID | ForEach-Object {
     $s = $_.Group.Percent | Measure-Object -Average -Minimum -Maximum

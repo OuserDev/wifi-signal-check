@@ -2,19 +2,27 @@
 > 
 # wifi-signal-check
 
-주변 Wi-Fi AP의 신호 세기를 **여러 번 측정해 평균으로** 순위를 내는 PowerShell 스크립트. 설치할 게 없다(Windows 내장 `netsh` + `wlanapi.dll`만 사용).
+주변 Wi-Fi AP의 신호 세기를 **여러 번 측정해 평균으로** 순위를 내는 PowerShell 스크립트. 설치할 게 없다(Windows 내장 `netsh` + `wlanapi.dll`만 사용, 관리자 권한 불필요).
+
+## 쓰는 법
+
+그냥 실행하면 두 가지를 순서대로 물어본다.
+
+```
+원하는 측정 횟수를 입력해주세요 (Enter = 5): 5
+찾을 SSID를 입력해주세요, 일부만 입력해도 됩니다 (Enter = 전체): cagong
+'cagong' 포함 AP, 5 회 측정 — 약 25초 소요
+```
+
+인자로 넘기면 묻지 않는다 (배치·예약 실행용).
 
 ```powershell
-.\wifi-signal.ps1                       # 측정 횟수를 물어본다, 전체 AP
-.\wifi-signal.ps1 cagong                # 측정 횟수를 물어본다, SSID에 'cagong' 포함만
-.\wifi-signal.ps1 cagong 5              # 묻지 않고 바로 5회 (배치/예약 실행용)
+.\wifi-signal.ps1                       # 위처럼 물어본다
+.\wifi-signal.ps1 cagong 5              # cagong 포함 AP, 5회
+.\wifi-signal.ps1 '' 5                  # 전체 AP, 5회
 .\wifi-signal.ps1 cagong 5 -DelaySec 8  # 스캔 요청 후 대기 8초
 .\wifi-signal.ps1 -SelfTest             # 파서 자체 검사
 ```
-
-횟수를 인자로 주지 않으면 실행 시 직접 물어본다. Enter만 치면 5회:
-
-
 
 출력 예:
 
@@ -35,14 +43,25 @@ cagongzok_3   75   60   85 -62.5 5
 → 가장 강함: cagongzok_1  평균 89.2% (약 -55.4 dBm, 89~90%, 5/5 회 포착)
 ```
 
+## 왜 1회 측정은 못 믿나
+
+`netsh wlan show networks`는 **스캔을 새로 돌리지 않는다.** 드라이버가 캐시해 둔 지난 스캔 결과를 그대로 돌려줄 뿐이다. 그래서
+
+- 연속으로 호출하면 값이 소수점 하나 안 틀리고 똑같이 반복된다 (측정이 아니라 복사).
+- 캐시가 비어 있으면 주변에 20개가 있어도 **1~2개만** 잡힌다.
+
+이 스크립트는 회차마다 `wlanapi.dll`의 `WlanScan()`을 호출해 실제 스캔을 요청하고(Windows Wi-Fi 목록 UI가 쓰는 그 API) `-DelaySec` 만큼 결과가 올라오길 기다린다. 위 출력에서 회차가 갈수록 잡히는 AP 수가 11 → 22로 늘어나는 게 그 효과다.
+
+실제로 위 예시의 `cagongzok_3`은 1회 측정에서 81%로 공동 1위였지만, 5회 평균은 75%에 편차 60~85%로 가장 불안정한 AP였다. 반대로 `cagongzok_1`은 캐시에 아예 없어서 1회 측정에서는 보이지도 않았다.
+
 ## 읽는 법
 
 | 열 | 의미 |
 |---|---|
 | `Avg%` | 평균 신호 세기. 순위 기준 |
 | `Min%` / `Max%` | 측정 범위. **차이가 크면 불안정한 AP** |
-| `dBm` | `%/2 - 100` 근사치 (Windows 환산식) |
-| `N` | 잡힌 횟수. `Count`보다 작으면 간헐적으로 놓친 AP |
+| `dBm` | `%/2 - 100` 근사치 (Windows 환산식). 실측 RSSI가 아니다 |
+| `N` | 잡힌 횟수. 측정 횟수보다 작으면 간헐적으로 놓친 AP |
 
 세기가 비슷하면 `Min~Max` 편차가 작은 쪽을 고르는 게 낫다. 세기만 같고 채널이 혼잡하면 체감은 다르므로, 필요하면 `netsh wlan show networks mode=bssid`에서 `채널 사용률`과 밴드(2.4/5GHz)도 같이 본다.
 
@@ -56,14 +75,14 @@ cagongzok_3   75   60   85 -62.5 5
 Windows 기본 실행 정책이 `Restricted`라 `.ps1` 로드 자체가 막힌 것이다. 정책을 바꾸지 않고 **한 번만 우회**하는 쪽을 권한다.
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\Desktop\wifi-signal.ps1" cagong 5
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\Desktop\wifi-signal.ps1"
 ```
 
 이미 열려 있는 창에서 그대로 쓰려면 — `-Scope Process`는 그 창을 닫으면 사라지므로 시스템 설정을 건드리지 않는다:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\wifi-signal.ps1 cagong 5
+.\wifi-signal.ps1
 ```
 
 매번 치기 귀찮으면 계정 단위로 완화할 수도 있다. 다만 이건 그 계정의 **모든** 스크립트에 적용되니 알고 쓸 것:
