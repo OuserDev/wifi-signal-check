@@ -5,12 +5,16 @@
 주변 Wi-Fi AP의 신호 세기를 **여러 번 측정해 평균으로** 순위를 내는 PowerShell 스크립트. 설치할 게 없다(Windows 내장 `netsh` + `wlanapi.dll`만 사용).
 
 ```powershell
-.\wifi-signal.ps1                       # 전체, 1회
-.\wifi-signal.ps1 cagong                # SSID에 'cagong' 포함, 1회
-.\wifi-signal.ps1 cagong 5              # 5회 측정 후 평균  ← 권장
+.\wifi-signal.ps1                       # 측정 횟수를 물어본다, 전체 AP
+.\wifi-signal.ps1 cagong                # 측정 횟수를 물어본다, SSID에 'cagong' 포함만
+.\wifi-signal.ps1 cagong 5              # 묻지 않고 바로 5회 (배치/예약 실행용)
 .\wifi-signal.ps1 cagong 5 -DelaySec 8  # 스캔 요청 후 대기 8초
 .\wifi-signal.ps1 -SelfTest             # 파서 자체 검사
 ```
+
+횟수를 인자로 주지 않으면 실행 시 직접 물어본다. Enter만 치면 5회:
+
+
 
 출력 예:
 

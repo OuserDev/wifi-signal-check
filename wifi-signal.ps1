@@ -1,9 +1,9 @@
 ﻿<#
   주변 Wi-Fi AP 신호 세기를 여러 번 측정해 평균으로 순위를 낸다.
 
-  .\wifi-signal.ps1                       전체, 1회
-  .\wifi-signal.ps1 cagong                SSID에 'cagong' 포함, 1회
-  .\wifi-signal.ps1 cagong 5              5회 측정 후 평균
+  .\wifi-signal.ps1                       횟수를 직접 입력받아 전체 측정
+  .\wifi-signal.ps1 cagong                SSID에 'cagong' 포함, 횟수는 입력받음
+  .\wifi-signal.ps1 cagong 5              입력 없이 바로 5회 측정
   .\wifi-signal.ps1 cagong 5 -DelaySec 8  스캔 요청 후 8초 대기
   .\wifi-signal.ps1 -SelfTest             파서 자체 검사
 
@@ -15,7 +15,7 @@
 #>
 param(
     [string]$Filter = '',
-    [int]$Count = 1,
+    [int]$Count = 0,
     [int]$DelaySec = 5,
     [switch]$SelfTest
 )
@@ -41,6 +41,19 @@ if ($SelfTest) {
     if ($r[1].SSID -ne 'en_ap' -or $r[1].Percent -ne 42) { throw "SelfTest 실패: 영문 파싱" }
     Write-Host 'SelfTest OK'
     exit 0
+}
+
+# 횟수를 인자로 안 줬으면 직접 물어본다 (탐색기에서 더블클릭 실행한 경우 포함)
+$asked = $false
+if ($Count -lt 1) {
+    $asked = $true
+    while ($true) {
+        $in = Read-Host '원하는 시도 횟수를 입력해주세요 (Enter = 5)'
+        if ([string]::IsNullOrWhiteSpace($in)) { $Count = 5; break }
+        if ($in -match '^\d+$' -and [int]$in -ge 1) { $Count = [int]$in; break }
+        Write-Host '1 이상의 숫자로 입력해주세요.' -ForegroundColor Yellow
+    }
+    Write-Host "$Count 회 측정 — 약 $($Count * $DelaySec)초 소요`n"
 }
 
 # 드라이버에 실제 스캔을 요청한다. 실패하면 $false (캐시만 읽고 진행).
@@ -98,3 +111,5 @@ $result = $samples | Group-Object SSID | ForEach-Object {
 $result | Format-Table -AutoSize
 $b = $result[0]
 Write-Host "→ 가장 강함: $($b.SSID)  평균 $($b.'Avg%')% (약 $($b.dBm) dBm, $($b.'Min%')~$($b.'Max%')%, $($b.N)/$Count 회 포착)"
+
+if ($asked) { Read-Host "`n종료하려면 Enter" | Out-Null }
